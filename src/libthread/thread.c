@@ -107,12 +107,18 @@ threadalloc(void (*fn)(void*), void *arg, uint stack)
 	uint x, y;
 	ulong z;
 
-	/* allocate the task and stack together */
-	t = malloc(sizeof *t+stack);
+	/* allocate the task */
+	t = malloc(sizeof *t);
 	if(t == nil)
 		sysfatal("threadalloc malloc: %r");
 	memset(t, 0, sizeof *t);
-	t->stk = (uchar*)(t+1);
+	/* allocate the real stack */
+	t->stk = mmap(NULL, stack, PROT_READ | PROT_WRITE,
+	    MAP_PRIVATE | MAP_ANON | MAP_STACK, -1, 0);
+	if (t->stk == MAP_FAILED) {
+		free(t);
+		sysfatal("threadalloc malloc: %r");
+	}
 	t->stksize = stack;
 	t->id = incref(&threadidref);
 //print("fn=%p arg=%p\n", fn, arg);
@@ -133,8 +139,8 @@ threadalloc(void (*fn)(void*), void *arg, uint stack)
 
 	/* call makecontext to do the real work. */
 	/* leave a few words open on both ends */
-	t->context.uc.uc_stack.ss_sp = (void*)(t->stk+8);
-	t->context.uc.uc_stack.ss_size = t->stksize-64;
+	t->context.uc.uc_stack.ss_sp = t->stk;
+	t->context.uc.uc_stack.ss_size = t->stksize;
 #if defined(__sun__) && !defined(__MAKECONTEXT_V2_SOURCE)		/* sigh */
 	/* can avoid this with __MAKECONTEXT_V2_SOURCE but only on SunOS 5.9 */
 	t->context.uc.uc_stack.ss_sp = 
@@ -364,6 +370,7 @@ procscheduler(Proc *p)
 			delthreadinproc(p, t);
 			p->nthread--;
 /*print("nthread %d\n", p->nthread); */
+			munmap(t->stk, t->stksize);
 			free(t);
 		}
 	}

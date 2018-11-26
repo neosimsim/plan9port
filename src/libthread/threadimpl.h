@@ -10,6 +10,8 @@
 #		define _XOPEN_SOURCE 	/* for Snow Leopard */
 #	endif
 #	include <ucontext.h>
+#elif defined(__OpenBSD__)
+#	include <sys/mman.h>
 #endif
 #include <sys/utsname.h>
 #include "libc.h"
